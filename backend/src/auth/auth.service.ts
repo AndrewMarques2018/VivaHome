@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
   ForbiddenException,
 } from '@nestjs/common';
-import { HASH_ROUNDS, UserService } from 'src/user/user.service';
+import { UserService } from 'src/user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -14,6 +14,8 @@ import { RegisterDto } from './dto/register.dto';
 import { UserEntity } from 'src/user/entities/user.entity';
 import { SessionService } from 'src/session/session.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { Profile } from 'passport-google-oauth20';
+import * as crypto from 'crypto';
 
 export interface AuthPayload {
   userId: string;
@@ -32,7 +34,8 @@ export class AuthService {
   async validateUser(email: string, pass: string): Promise<UserEntity> {
     const user = await this.userService.findByEmail(email);
 
-    if (!user) {
+    if (!user || !user.password) {
+      // Se 'user' não existe OU 'user.password' é 'null', o login falha.
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
@@ -62,7 +65,7 @@ export class AuthService {
       user.email,
     );
 
-    const hashedToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
+    const hashedToken = this._hashToken(refreshToken);
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -105,7 +108,7 @@ export class AuthService {
   async refreshTokens(refreshTokenDto: RefreshTokenDto, deviceAgent?: string) {
     const { refreshToken } = refreshTokenDto;
 
-    const hashedToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
+    const hashedToken = this._hashToken(refreshToken);
 
     // Encontrar a sessão no banco
     const session =
@@ -130,7 +133,7 @@ export class AuthService {
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
       await this._generateTokens(user.id, user.email);
 
-    const newHashedToken = await bcrypt.hash(newRefreshToken, HASH_ROUNDS);
+    const newHashedToken = this._hashToken(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     await this.sessionService.create(
@@ -148,7 +151,7 @@ export class AuthService {
 
   async logout(refreshTokenDto: RefreshTokenDto) {
     const { refreshToken } = refreshTokenDto;
-    const hashedToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
+    const hashedToken = this._hashToken(refreshToken);
 
     const { count } =
       await this.sessionService.deleteByHashedToken(hashedToken);
@@ -159,5 +162,74 @@ export class AuthService {
     }
 
     return { message: 'Logout realizado com sucesso.' };
+  }
+
+  /**
+   * Validação do Usuário Google (Find-or-Create)
+   * Chamado pela GoogleStrategy.
+   */
+  async validateGoogleUser(profile: Profile): Promise<UserEntity> {
+    const { id: googleId, displayName: name, emails } = profile;
+    if (!emails || emails.length === 0) {
+      throw new InternalServerErrorException(
+        'Google profile não retornou e-mail',
+      );
+    }
+    const email = emails[0].value;
+
+    const user = await this.userService.findByEmail(email);
+
+    if (user) {
+      // Se ele não tem googleId, linka a conta
+      if (!user.googleId) {
+        const updatedUser = await this.userService.update(user.id, {
+          googleId,
+        });
+        return updatedUser;
+      }
+
+      return new UserEntity(user);
+    }
+
+    // Se o usuário NÃO existe, cria um novo
+    return this.userService.create({
+      email,
+      name,
+      googleId,
+      password: undefined, // Senha é opcional
+    });
+  }
+
+  /**
+   * Lógica de Login Pós-Google
+   * Chamado pelo AuthController após o 'validate' da estratégia.
+   */
+  async loginFromGoogle(user: UserEntity, deviceAgent: string) {
+    // O usuário já foi validado/criado.
+    // Agora, apenas geramos NOSSOS tokens e criamos a SESSÃO.
+
+    const { accessToken, refreshToken } = await this._generateTokens(
+      user.id,
+      user.email,
+    );
+
+    const hashedToken = this._hashToken(refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+
+    await this.sessionService.create(
+      user.id,
+      hashedToken,
+      expiresAt,
+      deviceAgent,
+    );
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * Helper privado para hashear tokens de forma determinística (SHA256)
+   */
+  private _hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 }

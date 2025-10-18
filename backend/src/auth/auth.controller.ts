@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Controller,
   Post,
@@ -7,16 +5,28 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Get,
+  Res,
+  UseGuards,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { UserEntity } from 'src/user/entities/user.entity';
+import { User } from './decorators/user.decorator';
+import { ConfigService } from '@nestjs/config';
+import { Request, Response } from 'express';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Public()
   @Post('register')
@@ -46,5 +56,40 @@ export class AuthController {
   @Post('logout')
   logout(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.logout(refreshTokenDto);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  googleLogin() {
+    // Este método não é executado.
+    // O @UseGuards(AuthGuard('google')) intercepta a requisição
+    // e redireciona para a página de login do Google.
+  }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleLoginCallback(
+    @User() user: UserEntity,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const deviceAgent = req.headers['user-agent'] || 'Dispositivo desconhecido';
+
+    const { accessToken, refreshToken } =
+      await this.authService.loginFromGoogle(user, deviceAgent);
+
+    // 4. Validar a URL do frontend
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    if (!frontendUrl) {
+      throw new InternalServerErrorException(
+        'FRONTEND_URL não configurado no .env',
+      );
+    }
+
+    res.redirect(
+      `${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`,
+    );
   }
 }

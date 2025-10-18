@@ -13,4 +13,8 @@ export class UpdateUserDto {
   @MinLength(6, { message: 'Senha deve ter no mínimo 6 caracteres.' })
   @IsOptional()
   password?: string;
+
+  @IsString()
+  @IsOptional()
+  googleId?: string;
 }

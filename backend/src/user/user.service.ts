@@ -12,13 +12,16 @@ export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto): Promise<UserEntity> {
-    const hashedPassword = await bcrypt.hash(dto.password, HASH_ROUNDS);
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, HASH_ROUNDS)
+      : null;
 
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         name: dto.name,
         password: hashedPassword,
+        googleId: dto.googleId,
       },
     });
 
