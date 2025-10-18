@@ -1,43 +1,30 @@
-// src/user/user.controller.ts
 import { Controller, Get, Body, Put, Delete, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserEntity } from './entities/user.entity';
-
-// NOTA: Estes @UseGuards e o @User (decorator de parâmetro)
-// ainda não existem. Vamos adicioná-los na Fase 3 (AuthModule).
-// Por enquanto, as rotas estão "inseguras".
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { User } from 'src/auth/decorators/user.decorator';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  // Rota: GET /users/me
   @Get('me')
-  // @UseGuards(JwtAuthGuard) // <-- Adicionaremos isso depois
-  getProfile(/* @User('id') userId: string */): Promise<UserEntity> {
-    const fakeUserId = 'ID_VEM_DO_TOKEN'; // <-- Vamos substituir isso
-    return this.userService.findById(fakeUserId);
+  getProfile(@User() user: UserEntity): UserEntity {
+    return user;
   }
 
-  // Rota: PUT /users/me
   @Put('me')
-  // @UseGuards(JwtAuthGuard) // <-- Adicionaremos isso depois
   updateProfile(
-    /* @User('id') userId: string, */
+    @User('id') userId: string,
     @Body() dto: UpdateUserDto,
   ): Promise<UserEntity> {
-    const fakeUserId = 'ID_VEM_DO_TOKEN'; // <-- Vamos substituir isso
-    return this.userService.update(fakeUserId, dto);
+    return this.userService.update(userId, dto);
   }
 
-  // Rota: DELETE /users/me
   @Delete('me')
-  // @UseGuards(JwtAuthGuard) // <-- Adicionaremos isso depois
-  deleteAccount(
-    /* @User('id') userId: string */
-  ): Promise<UserEntity> {
-    const fakeUserId = 'ID_VEM_DO_TOKEN'; // <-- Vamos substituir isso
-    return this.userService.delete(fakeUserId);
+  deleteAccount(@User('id') userId: string): Promise<UserEntity> {
+    return this.userService.delete(userId);
   }
 }

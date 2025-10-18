@@ -6,15 +6,28 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { UserEntity } from './entities/user.entity';
 
-// Quantidade de "salt rounds" para o bcrypt. Padrão é 10.
 export const HASH_ROUNDS = 10;
 
 @Injectable()
 export class UserService {
-  // 1. Injetamos o PrismaService
   constructor(private readonly prisma: PrismaService) {}
 
-  // --- MÉTODOS PARA O AUTHMODULE ---
+  async updateRefreshToken(userId: string, refreshToken: string | null) {
+    // Se o token for nulo (logout), salvamos null
+    if (!refreshToken) {
+      return this.prisma.user.update({
+        where: { id: userId },
+        data: { hashedRefreshToken: null },
+      });
+    }
+
+    // Caso contrário, salvamos o HASH do token
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { hashedRefreshToken },
+    });
+  }
 
   async create(dto: CreateUserDto): Promise<UserEntity> {
     // 2. Hashear a senha
@@ -29,19 +42,14 @@ export class UserService {
       },
     });
 
-    // 4. Retornar a entidade segura (sem a senha)
     return new UserEntity(user);
   }
 
   async findByEmail(email: string) {
-    // Este método retorna o usuário COMPLETO (com senha)
-    // pois será usado pelo AuthService para validar o login.
     return this.prisma.user.findUnique({
       where: { email },
     });
   }
-
-  // --- MÉTODOS PARA O USERCONTROLLER ---
 
   async findById(id: string): Promise<UserEntity> {
     const user = await this.prisma.user.findUnique({
@@ -56,7 +64,6 @@ export class UserService {
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {
-    // Se a senha foi enviada no DTO, precisamos hasheá-la
     if (dto.password) {
       dto.password = await bcrypt.hash(dto.password, HASH_ROUNDS);
     }
