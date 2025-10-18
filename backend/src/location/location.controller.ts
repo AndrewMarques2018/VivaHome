@@ -1,4 +1,3 @@
-// src/location/location.controller.ts
 import { Controller, Get, Param } from '@nestjs/common';
 import { LocationService } from './location.service';
 

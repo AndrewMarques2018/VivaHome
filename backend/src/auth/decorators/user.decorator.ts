@@ -3,8 +3,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { UserEntity } from 'src/user/entities/user.entity';
 
-// O objeto 'request.user' terá o tipo UserEntity
-// (pois é o que retornamos no validate() da JwtStrategy)
 export const User = createParamDecorator(
   (data: keyof UserEntity, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();

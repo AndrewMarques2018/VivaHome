@@ -4,13 +4,14 @@ import {
   ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { UserService } from 'src/user/user.service';
+import { HASH_ROUNDS, UserService } from 'src/user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UserEntity } from 'src/user/entities/user.entity';
+import { SessionService } from 'src/session/session.service';
 
 export interface AuthPayload {
   userId: string;
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<UserEntity> {
@@ -50,14 +52,29 @@ export class AuthService {
     return this.userService.create(dto);
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, deviceAgent?: string) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
 
-    const tokens = await this._generateTokens(user.id, user.email);
+    const { accessToken, refreshToken } = await this._generateTokens(
+      user.id,
+      user.email,
+    );
 
-    await this.userService.updateRefreshToken(user.id, tokens.refreshToken);
+    const hashedToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
 
-    return tokens;
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.sessionService.create(
+      user.id,
+      hashedToken,
+      expiresAt,
+      deviceAgent,
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+    };
   }
 
   private async _generateTokens(userId: string, email: string) {

@@ -1,4 +1,3 @@
-// src/user/user.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -12,28 +11,9 @@ export const HASH_ROUNDS = 10;
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async updateRefreshToken(userId: string, refreshToken: string | null) {
-    // Se o token for nulo (logout), salvamos null
-    if (!refreshToken) {
-      return this.prisma.user.update({
-        where: { id: userId },
-        data: { hashedRefreshToken: null },
-      });
-    }
-
-    // Caso contrário, salvamos o HASH do token
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, HASH_ROUNDS);
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { hashedRefreshToken },
-    });
-  }
-
   async create(dto: CreateUserDto): Promise<UserEntity> {
-    // 2. Hashear a senha
     const hashedPassword = await bcrypt.hash(dto.password, HASH_ROUNDS);
 
-    // 3. Salvar no banco
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
