@@ -7,17 +7,21 @@ import { UserModule } from './user/user.module';
 import { LocationModule } from './location/location.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionModule } from './session/session.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // 2. Tornar as variáveis de ambiente globais
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     UserModule,
     LocationModule,
     AuthModule,
     SessionModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

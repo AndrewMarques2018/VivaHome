@@ -1,25 +1,4 @@
-Fase 0: A Fundação (Configuração do Projeto)
-Antes de escrever a lógica de negócio, preparamos o terreno.
 
-Inicialização do Projeto:
-
-nest new backend
-
-Instalação de dependências-chave: @nestjs/config, @nestjs/passport, @nestjs/jwt, passport-jwt, passport-google-oauth20, prisma, @prisma/client, bcrypt, class-validator, class-transformer, @nestjs/serve-static (para imagens, se for local), nodemailer.
-
-Módulo de Configuração (ConfigModule):
-
-Centralizar o carregamento de variáveis de ambiente (.env).
-
-Definir variáveis: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, EMAIL_HOST, EMAIL_USER, EMAIL_PASS, etc.
-
-Módulo do Prisma (PrismaModule):
-
-Criar um PrismaService que se conecta ao banco e lida com o ciclo de vida da conexão.
-
-Exportar o PrismaService para ser usado por outros módulos.
-
-Definição do Schema (schema.prisma):
 
 Model User: (id, email, name, password, googleId, roles, hashedRefreshToken, etc.)
 
@@ -29,22 +8,10 @@ Model Image: (id, url, announcementId) -> Relação com Announcement.
 
 Model PasswordResetToken: (id, token, userId, expiresAt)
 
-Opcional (para IBGE): State e City (ver Fase 2).
 
-Pipes Globais:
 
-Configurar um ValidationPipe global no main.ts para que todos os DTOs sejam validados automaticamente.
 
 Fase 1: Módulo de Usuário (UserModule)
-O recurso central que representa quem usa o sistema.
-
-UserService (Lógica):
-
-create(dto): Criar usuário (usado pelo AuthService no registro). Deve hashear a senha (bcrypt).
-
-findByEmail(email): Encontrar usuário pelo e-mail (usado pelo AuthService no login).
-
-findById(id): Encontrar usuário pelo ID.
 
 update(id, dto): Atualizar dados do perfil (nome, etc.).
 

@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -30,5 +31,20 @@ export class AuthController {
     // O AuthService já trata o erro de e-mail/senha inválidos
     const deviceAgent = req.headers['user-agent'] || 'Dispositivo desconhecido';
     return this.authService.login(loginDto, deviceAgent);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('refresh')
+  refreshTokens(@Body() refreshTokenDto: RefreshTokenDto, @Req() req: Request) {
+    const deviceAgent = req.headers['user-agent'] || 'Dispositivo desconhecido';
+    return this.authService.refreshTokens(refreshTokenDto, deviceAgent);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('logout')
+  logout(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.logout(refreshTokenDto);
   }
 }
