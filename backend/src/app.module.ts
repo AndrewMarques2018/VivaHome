@@ -9,6 +9,8 @@ import { AuthModule } from './auth/auth.module';
 import { SessionModule } from './session/session.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TasksModule } from './tasks/tasks.module';
+import { MailModule } from './mail/mail.module';
+import { CryptoModule } from './common/crypto/crypto.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { TasksModule } from './tasks/tasks.module';
     AuthModule,
     SessionModule,
     TasksModule,
+    MailModule,
+    CryptoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

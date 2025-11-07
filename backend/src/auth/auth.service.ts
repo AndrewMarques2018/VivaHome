@@ -8,14 +8,17 @@ import {
 import { UserService } from 'src/user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UserEntity } from 'src/user/entities/user.entity';
 import { SessionService } from 'src/session/session.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { Profile } from 'passport-google-oauth20';
-import * as crypto from 'crypto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { MailService } from 'src/mail/mail.service';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CryptoService } from 'src/common/crypto/crypto.service';
 
 export interface AuthPayload {
   userId: string;
@@ -25,10 +28,13 @@ export interface AuthPayload {
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly sessionService: SessionService,
+    private readonly mailService: MailService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<UserEntity> {
@@ -39,7 +45,10 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
-    const isPasswordValid = await bcrypt.compare(pass, user.password);
+    const isPasswordValid = await this.cryptoService.compare(
+      pass,
+      user.password,
+    );
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
@@ -65,7 +74,7 @@ export class AuthService {
       user.email,
     );
 
-    const hashedToken = this._hashToken(refreshToken);
+    const hashedToken = this.cryptoService.hashSha256(refreshToken);
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -107,8 +116,7 @@ export class AuthService {
 
   async refreshTokens(refreshTokenDto: RefreshTokenDto, deviceAgent?: string) {
     const { refreshToken } = refreshTokenDto;
-
-    const hashedToken = this._hashToken(refreshToken);
+    const hashedToken = this.cryptoService.hashSha256(refreshToken);
 
     // Encontrar a sessão no banco
     const session =
@@ -133,7 +141,7 @@ export class AuthService {
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
       await this._generateTokens(user.id, user.email);
 
-    const newHashedToken = this._hashToken(refreshToken);
+    const newHashedToken = this.cryptoService.hashSha256(newRefreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     await this.sessionService.create(
@@ -151,7 +159,7 @@ export class AuthService {
 
   async logout(refreshTokenDto: RefreshTokenDto) {
     const { refreshToken } = refreshTokenDto;
-    const hashedToken = this._hashToken(refreshToken);
+    const hashedToken = this.cryptoService.hashSha256(refreshToken);
 
     const { count } =
       await this.sessionService.deleteByHashedToken(hashedToken);
@@ -213,7 +221,7 @@ export class AuthService {
       user.email,
     );
 
-    const hashedToken = this._hashToken(refreshToken);
+    const hashedToken = this.cryptoService.hashSha256(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     await this.sessionService.create(
@@ -226,10 +234,73 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  /**
-   * Helper privado para hashear tokens de forma determinística (SHA256)
-   */
-  private _hashToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const { email } = dto;
+    const user = await this.userService.findByEmail(email);
+
+    // Prática de Segurança:
+    // Se o usuário não existir, NÃO retorne um erro 404.
+    // Apenas retorne 200 OK silenciosamente, para não vazar
+    // quais e-mails estão ou não cadastrados no sistema.
+    if (!user) {
+      return {
+        message:
+          'Se um usuário com este e-mail existir, um link de recuperação será enviado.',
+      };
+    }
+
+    const plainToken = this.cryptoService.generateRandomToken();
+    const hashedToken = this.cryptoService.hashSha256(plainToken);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        hashedToken: hashedToken,
+        expiresAt: expiresAt,
+      },
+    });
+
+    // Gerar o link para o frontend
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const resetLink = `${frontendUrl}/reset-password?token=${plainToken}`;
+
+    await this.mailService.sendEmail({
+      to: user.email,
+      subject: 'Recuperação de Senha - Viva Home',
+      template: 'password-reset',
+      context: {
+        name: user.name,
+        link: resetLink,
+      },
+    });
+
+    return {
+      message:
+        'Se um usuário com este e-mail existir, um link de recuperação será enviado.',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const { token, password } = dto;
+    const hashedToken = this.cryptoService.hashSha256(token);
+
+    const tokenRecord = await this.prisma.passwordResetToken.findUnique({
+      where: { hashedToken },
+    });
+
+    if (!tokenRecord || new Date() > tokenRecord.expiresAt) {
+      throw new ForbiddenException('Token inválido ou expirado.');
+    }
+
+    await this.userService.update(tokenRecord.userId, { password });
+
+    // Deletar o token e as sessões
+    await this.prisma.passwordResetToken.delete({
+      where: { id: tokenRecord.id },
+    });
+    await this.sessionService.deleteAllByUserId(tokenRecord.userId);
+
+    return { message: 'Senha atualizada com sucesso.' };
   }
 }

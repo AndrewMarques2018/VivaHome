@@ -9,4 +9,9 @@ export class AppController {
   getPing(): string {
     return this.appService.getPing();
   }
+
+  @Get('test-email')
+  testEmail() {
+    return this.appService.testSendEmail();
+  }
 }
