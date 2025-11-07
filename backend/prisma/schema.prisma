@@ -7,47 +7,124 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AdvertisementStatus {
+  DRAFT
+  PUBLISHED
+  SOLD
+  ARCHIVED
+}
 
+enum PropertyType {
+  HOUSE
+  APARTMENT
+  LAND
+  COMMERCIAL
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  AGENT
+}
+
+model Address {
+  id           String  @id @default(uuid())
+  street       String
+  number       String?
+  neighborhood String?
+  city         String
+  state        String
+  zipcode      String?
+
+  // Um endereço pode estar relacionado a um User OU a uma Advertisement.
+  // Como as chaves estrangeiras estão nos modelos User e Advertisement (com @unique),
+  // a cardinalidade 1:1 é garantida.
+  user          User?
+  advertisement Advertisement?
+}
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String?
-  googleId  String?  @unique
-  sessions Session[]
+  id        String  @id @default(uuid())
+  avatarUrl String?
 
-  // Campos automáticos
+  showContact    Boolean @default(true)
+  email          String  @unique
+  email_verified Boolean @default(false)
+  name           String
+  password       String?
+  phone          String?
+  phone_verified Boolean @default(false)
+  bio            String?
+  companyName    String?
+
+  role UserRole @default(USER)
+
+  advertisements Advertisement[]
+  favorites      Advertisement[] @relation("UserFavorites")
+
+  addressId   String?  @unique // Garante que o ID do Endereço é usado APENAS por 1 User
+  address     Address? @relation(fields: [addressId], references: [id])
+
+  googleId           String?              @unique
+  sessions           Session[]
+  PasswordResetToken PasswordResetToken[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
-  PasswordResetToken PasswordResetToken[]
+model Advertisement {
+  id           String              @id @default(uuid())
+  title        String
+  description  String
+  price        Decimal             @db.Decimal(12, 2)
+  propertyType PropertyType
+  bedrooms     Int?
+  bathrooms    Int?
+  suites       Int?
+  garageSpots  Int?
+  lotArea      Decimal?            @db.Decimal(10, 2)
+  builtArea    Decimal?            @db.Decimal(10, 2)
+  status       AdvertisementStatus @default(DRAFT)
+  amenities    String[]            @default([])
+  photos       String[]            @default([])
+
+  addressId   String?  @unique // Garante que o ID do Endereço é usado APENAS por 1 Advertisement
+  address     Address? @relation(fields: [addressId], references: [id])
+
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+
+  favoritedBy User[] @relation("UserFavorites")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
 }
 
 model Session {
-  id           String   @id @default(cuid())
-  hashedToken  String   @unique
-  
-  // Relação com o Usuário
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceAgent  String? 
+  id          String @id @default(uuid())
+  hashedToken String @unique
 
-  createdAt    DateTime @default(now())
-  expiresAt    DateTime
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceAgent String?
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 
   @@index([userId])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  
-  hashedToken String   @unique 
-  
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  expiresAt DateTime 
+  id String @id @default(uuid())
+
+  hashedToken String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
   createdAt DateTime @default(now())
 
   @@index([userId])
